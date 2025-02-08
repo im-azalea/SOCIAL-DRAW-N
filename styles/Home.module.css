@@ -1,7 +1,7 @@
 /* styles/Home.module.css */
 .container {
   min-height: 100vh;
-  background-color: #000; /* black background */
+  background-color: #000;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -16,7 +16,7 @@
 }
 
 .playButton {
-  background-color: #ff1493; /* pink */
+  background-color: #ff1493;
   border: none;
   padding: 1rem 2rem;
   font-size: 1.5rem;
@@ -32,7 +32,16 @@
 
 .countdown {
   font-size: 2rem;
-  color: #00f; /* bright blue */
+  color: #00f;
   margin-top: 1rem;
 }
 
+.claimButton {
+  background-color: #00bfff;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 1rem;
+}
