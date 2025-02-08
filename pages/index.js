@@ -4,20 +4,23 @@ import { ethers } from "ethers";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
+  // State untuk menyimpan data
   const [participants, setParticipants] = useState([]);
   const [totalBet, setTotalBet] = useState(0);
   const [round, setRound] = useState(1);
   const [prevWinner, setPrevWinner] = useState(null);
   const [prevPrize, setPrevPrize] = useState(0);
   const [countdown, setCountdown] = useState("");
+  const [currentAddress, setCurrentAddress] = useState("");
+  const [hasClaimed, setHasClaimed] = useState(false);
 
-  const TOKEN_AMOUNT = 10; // Mengubah tiket menjadi 10 token untuk testing
+  const TOKEN_AMOUNT = 10; // Untuk testing, tiket seharga 10 token
 
-  // Fungsi untuk menghitung sisa waktu sampai awal jam berikutnya
+  // Fungsi menghitung waktu mundur ke awal jam berikutnya
   const calculateCountdown = () => {
     const now = new Date();
     const nextHour = new Date(now);
-    nextHour.setMinutes(60, 0, 0); // set ke awal jam berikutnya
+    nextHour.setMinutes(60, 0, 0);
     return nextHour - now;
   };
 
@@ -26,7 +29,6 @@ export default function Home() {
     const interval = setInterval(() => {
       const diff = calculateCountdown();
       if (diff <= 0) {
-        // Ketika waktu habis, jalankan draw otomatis
         handleDraw();
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -42,7 +44,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [participants]);
 
-  // Fungsi untuk memanggil API endpoint runDraw
+  // Fungsi untuk memanggil API draw
   const handleDraw = async () => {
     if (participants.length === 0) {
       alert("No participants in this round.");
@@ -78,29 +80,30 @@ export default function Home() {
     setParticipants([]);
     setTotalBet(0);
     setRound((prev) => prev + 1);
+    setHasClaimed(false);
   };
 
-  // Fungsi untuk menangani klik tombol "PLAY"
+  // Fungsi untuk menangani pembelian tiket (PLAY)
   const handlePlay = async () => {
     try {
       if (!window.ethereum) {
         alert("MetaMask is not installed!");
         return;
       }
-      // Minta koneksi wallet
+      // Minta koneksi ke wallet
       await window.ethereum.request({ method: "eth_requestAccounts" });
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
+      setCurrentAddress(userAddress); // Simpan alamat wallet pemain
 
-      // Konfigurasi token contract (pastikan alamat kontrak sudah benar untuk jaringan Base)
+      // Konfigurasi token contract (pastikan alamat kontrak sesuai dengan jaringan Base)
       const TOKEN_CONTRACT_ADDRESS =
         "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
       const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
       const tokenABI = [
         "function transfer(address to, uint256 amount) public returns (bool)"
       ];
-
       const tokenContract = new ethers.Contract(
         TOKEN_CONTRACT_ADDRESS,
         tokenABI,
@@ -110,18 +113,50 @@ export default function Home() {
       // Hitung jumlah token (10 token, asumsikan 18 desimal)
       const amount = ethers.parseUnits(TOKEN_AMOUNT.toString(), 18);
 
-      // Transfer token dari wallet pemain ke main wallet
       const tx = await tokenContract.transfer(MAIN_WALLET, amount);
       alert("Transaction submitted. Waiting for confirmation...");
       await tx.wait();
       alert("Transaction confirmed! You have joined the draw.");
 
-      // Update data peserta dan total taruhan
+      // Update state peserta dan total taruhan
       setParticipants((prev) => [...prev, userAddress]);
       setTotalBet((prev) => prev + TOKEN_AMOUNT);
     } catch (error) {
       console.error(error);
       alert("Transaction failed. Please try again.");
+    }
+  };
+
+  // Fungsi untuk menangani klaim hadiah oleh pemenang
+  const handleClaim = async () => {
+    try {
+      if (!window.ethereum) {
+        alert("MetaMask is not installed!");
+        return;
+      }
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      // Konfigurasi LotteryClaim contract (alamat diambil dari environment variable publik)
+      const LOTTERY_CLAIM_ADDRESS = process.env.NEXT_PUBLIC_LOTTERY_CLAIM_ADDRESS;
+      const lotteryClaimABI = [
+        "function claimPrize() external"
+      ];
+      const lotteryClaimContract = new ethers.Contract(
+        LOTTERY_CLAIM_ADDRESS,
+        lotteryClaimABI,
+        signer
+      );
+
+      const tx = await lotteryClaimContract.claimPrize();
+      alert("Claim transaction submitted. Waiting for confirmation...");
+      await tx.wait();
+      alert("Prize claimed successfully!");
+      setHasClaimed(true);
+    } catch (error) {
+      console.error("Claim failed:", error);
+      alert("Claim failed. Please try again.");
     }
   };
 
@@ -153,6 +188,14 @@ export default function Home() {
         <p>Next Draw In:</p>
         <p>{countdown}</p>
       </div>
+      {/* Tampilkan tombol Claim jika wallet yang terhubung adalah pemenang dan belum klaim */}
+      {prevWinner &&
+        currentAddress.toLowerCase() === prevWinner.toLowerCase() &&
+        !hasClaimed && (
+          <button className={styles.claimButton} onClick={handleClaim}>
+            CLAIM PRIZE
+          </button>
+        )}
     </div>
   );
 }
