@@ -1,7 +1,7 @@
 // pages/index.js
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import WalletConnectProvider from "@walletconnect/web3-provider";
+import WalletConnectEthereumProvider from "@walletconnect/ethereum-provider";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
@@ -18,7 +18,7 @@ export default function Home() {
   // Untuk testing, tiket seharga 10 token
   const TOKEN_AMOUNT = 10;
 
-  // Ambil nilai environment dari .env.local
+  // Ambil nilai environment
   const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://YOUR_BASE_RPC_URL_HERE";
   const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 8453;
   const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID || "YourWalletConnectProjectID";
@@ -28,19 +28,24 @@ export default function Home() {
   const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
   const TOKEN_CONTRACT_ADDRESS = "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
 
-  // Fungsi getProvider: Menggunakan WalletConnect secara eksklusif
+  // Fungsi getProvider: Menggunakan WalletConnect v2
   const getProvider = async () => {
-    const wcProvider = new WalletConnectProvider({
+    // Inisialisasi provider WalletConnect Ethereum Provider (v2)
+    const wcProvider = await WalletConnectEthereumProvider.init({
       projectId: WC_PROJECT_ID,
-      rpc: { [CHAIN_ID]: RPC_URL },
-      chainId: CHAIN_ID,
-      qrcode: true, // Tampilkan QR Code atau deep link sesuai perangkat
+      chains: [CHAIN_ID],
+      rpcMap: {
+        [CHAIN_ID]: RPC_URL,
+      },
+      showQrModal: true, // Menampilkan QR code atau deep link sesuai perangkat
     });
+    // Minta koneksi dari provider
     await wcProvider.enable();
+    // Bungkus provider dengan ethers.js
     return new ethers.BrowserProvider(wcProvider);
   };
 
-  // Fungsi menghitung waktu mundur hingga awal jam berikutnya
+  // Fungsi menghitung waktu mundur ke awal jam berikutnya
   const calculateCountdown = () => {
     const now = new Date();
     const nextHour = new Date(now);
@@ -163,13 +168,9 @@ export default function Home() {
         <p>Next Draw In:</p>
         <p>{countdown}</p>
       </div>
-      {prevWinner &&
-        currentAddress.toLowerCase() === prevWinner.toLowerCase() &&
-        !hasClaimed && (
-          <button className={styles.claimButton} onClick={handleClaim}>
-            CLAIM PRIZE
-          </button>
-        )}
+      {prevWinner && currentAddress.toLowerCase() === prevWinner.toLowerCase() && !hasClaimed && (
+        <button className={styles.claimButton} onClick={handleClaim}>CLAIM PRIZE</button>
+      )}
     </div>
   );
 }
