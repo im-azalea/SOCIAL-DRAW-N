@@ -1,6 +1,7 @@
 // pages/index.js
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
+import CoinbaseWalletSDK from "@coinbase/wallet-sdk";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
@@ -15,6 +16,14 @@ export default function Home() {
   const [hasClaimed, setHasClaimed] = useState(false);
 
   const TOKEN_AMOUNT = 10; // Untuk testing, tiket seharga 10 token
+
+  // Untuk Coinbase Wallet fallback
+  // Anda bisa mengatur nilai default RPC dan chain ID (misalnya, Base Mainnet chain id 8453)
+  const APP_NAME = "Social Draw";
+  const APP_LOGO_URL = "https://social-draw-1.vercel.app/favicon.ico";
+  const DEFAULT_ETH_JSONRPC_URL =
+    process.env.NEXT_PUBLIC_RPC_URL || "https://YOUR_BASE_RPC_URL_HERE";
+  const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 8453;
 
   // Fungsi menghitung waktu mundur ke awal jam berikutnya
   const calculateCountdown = () => {
@@ -83,19 +92,37 @@ export default function Home() {
     setHasClaimed(false);
   };
 
-  // Fungsi untuk menangani pembelian tiket (PLAY)
+  // Fungsi untuk menangani pembelian tiket (PLAY) dengan dukungan mobile wallet (prioritas Coinbase)
   const handlePlay = async () => {
     try {
-      if (!window.ethereum) {
-        alert("MetaMask is not installed!");
-        return;
+      let provider;
+      // Cek apakah window.ethereum tersedia (desktop atau beberapa mobile wallet)
+      if (typeof window.ethereum !== "undefined") {
+        // Gunakan provider dari window.ethereum
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        provider = new ethers.BrowserProvider(window.ethereum);
+      } else {
+        // Jika window.ethereum tidak ada, gunakan Coinbase Wallet SDK
+        const coinbaseWallet = new CoinbaseWalletSDK({
+          appName: APP_NAME,
+          appLogoUrl: APP_LOGO_URL,
+          darkMode: false
+        });
+        // Buat provider menggunakan Coinbase Wallet dengan RPC dan chain ID yang telah ditentukan
+        const ethereum = coinbaseWallet.makeWeb3Provider(
+          DEFAULT_ETH_JSONRPC_URL,
+          CHAIN_ID
+        );
+        provider = new ethers.BrowserProvider(ethereum);
+        // Minta koneksi (Coinbase Wallet akan menampilkan tampilan koneksi)
+        // Catatan: Coinbase Wallet SDK biasanya memunculkan pop-up untuk koneksi
+        // Jangan lupa untuk mengecek apakah koneksi berhasil
       }
-      // Minta koneksi ke wallet
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new ethers.BrowserProvider(window.ethereum);
+
+      // Dapatkan signer dan alamat wallet pemain
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
-      setCurrentAddress(userAddress); // Simpan alamat wallet pemain
+      setCurrentAddress(userAddress);
 
       // Konfigurasi token contract (pastikan alamat kontrak sesuai dengan jaringan Base)
       const TOKEN_CONTRACT_ADDRESS =
@@ -130,12 +157,22 @@ export default function Home() {
   // Fungsi untuk menangani klaim hadiah oleh pemenang
   const handleClaim = async () => {
     try {
-      if (!window.ethereum) {
-        alert("MetaMask is not installed!");
-        return;
+      let provider;
+      if (typeof window.ethereum !== "undefined") {
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        provider = new ethers.BrowserProvider(window.ethereum);
+      } else {
+        const coinbaseWallet = new CoinbaseWalletSDK({
+          appName: APP_NAME,
+          appLogoUrl: APP_LOGO_URL,
+          darkMode: false
+        });
+        const ethereum = coinbaseWallet.makeWeb3Provider(
+          DEFAULT_ETH_JSONRPC_URL,
+          CHAIN_ID
+        );
+        provider = new ethers.BrowserProvider(ethereum);
       }
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
       // Konfigurasi LotteryClaim contract (alamat diambil dari environment variable publik)
