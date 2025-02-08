@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import CoinbaseWalletSDK from "@coinbase/wallet-sdk";
+import WalletConnectProvider from "@walletconnect/web3-provider";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
@@ -20,11 +21,12 @@ export default function Home() {
   // Konfigurasi untuk Coinbase Wallet fallback
   const APP_NAME = "Social Draw";
   const APP_LOGO_URL = "https://social-draw-1.vercel.app/favicon.ico";
-  // Pastikan ganti nilai DEFAULT_ETH_JSONRPC_URL dengan RPC endpoint jaringan Base yang benar
   const DEFAULT_ETH_JSONRPC_URL =
     process.env.NEXT_PUBLIC_RPC_URL || "https://YOUR_BASE_RPC_URL_HERE";
-  // Misalnya chain id untuk Base Mainnet adalah 8453; sesuaikan jika berbeda
   const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 8453;
+
+  // Konfigurasi untuk WalletConnect (opsional)
+  const WC_PROJECT_ID = "YOUR_WALLETCONNECT_PROJECT_ID"; // Dapatkan dari https://cloud.walletconnect.com/
 
   // Fungsi menghitung waktu mundur ke awal jam berikutnya
   const calculateCountdown = () => {
@@ -93,37 +95,57 @@ export default function Home() {
     setHasClaimed(false);
   };
 
-  // Fungsi untuk menangani pembelian tiket (PLAY) dengan dukungan mobile wallet (prioritas Coinbase)
-  const handlePlay = async () => {
-    try {
-      let provider;
-      // Cek apakah window.ethereum tersedia
-      if (typeof window.ethereum !== "undefined") {
-        await window.ethereum.request({ method: "eth_requestAccounts" });
-        provider = new ethers.BrowserProvider(window.ethereum);
-      } else {
-        // Jika window.ethereum tidak ada, gunakan Coinbase Wallet SDK
+  // Fungsi untuk mendapatkan provider dengan prioritas:
+  // 1. window.ethereum (injected)
+  // 2. Coinbase Wallet SDK
+  // 3. WalletConnect
+  const getProvider = async () => {
+    if (typeof window.ethereum !== "undefined") {
+      // Jika ada injected provider, gunakan itu
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      return new ethers.BrowserProvider(window.ethereum);
+    } else {
+      // Coba inisialisasi Coinbase Wallet SDK terlebih dahulu
+      try {
         const coinbaseWallet = new CoinbaseWalletSDK({
           appName: APP_NAME,
           appLogoUrl: APP_LOGO_URL,
           darkMode: false
         });
-        // Buat provider menggunakan Coinbase Wallet dengan RPC dan chain ID yang telah ditentukan
         const ethereum = coinbaseWallet.makeWeb3Provider(
           DEFAULT_ETH_JSONRPC_URL,
           CHAIN_ID
         );
-        // Tambahkan request accounts secara eksplisit untuk memastikan pop-up koneksi muncul
         await ethereum.request({ method: "eth_requestAccounts" });
-        provider = new ethers.BrowserProvider(ethereum);
+        return new ethers.BrowserProvider(ethereum);
+      } catch (cbError) {
+        console.error("Coinbase Wallet SDK error:", cbError);
       }
+      // Jika masih gagal, gunakan WalletConnect sebagai alternatif
+      try {
+        const wcProvider = new WalletConnectProvider({
+          projectId: WC_PROJECT_ID, // Ganti dengan project id WalletConnect Anda
+          rpc: { [CHAIN_ID]: DEFAULT_ETH_JSONRPC_URL },
+          chainId: CHAIN_ID,
+          qrcode: true
+        });
+        await wcProvider.enable();
+        return new ethers.BrowserProvider(wcProvider);
+      } catch (wcError) {
+        console.error("WalletConnect error:", wcError);
+        throw new Error("Tidak dapat menghubungkan wallet.");
+      }
+    }
+  };
 
-      // Dapatkan signer dan alamat wallet pemain
+  // Fungsi untuk menangani pembelian tiket (PLAY)
+  const handlePlay = async () => {
+    try {
+      const provider = await getProvider();
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
       setCurrentAddress(userAddress);
 
-      // Konfigurasi token contract (pastikan alamat kontrak sesuai dengan jaringan Base)
       const TOKEN_CONTRACT_ADDRESS =
         "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
       const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
@@ -136,19 +158,16 @@ export default function Home() {
         signer
       );
 
-      // Hitung jumlah token (10 token, asumsikan 18 desimal)
       const amount = ethers.parseUnits(TOKEN_AMOUNT.toString(), 18);
-
       const tx = await tokenContract.transfer(MAIN_WALLET, amount);
       alert("Transaction submitted. Waiting for confirmation...");
       await tx.wait();
       alert("Transaction confirmed! You have joined the draw.");
 
-      // Update state peserta dan total taruhan
       setParticipants((prev) => [...prev, userAddress]);
       setTotalBet((prev) => prev + TOKEN_AMOUNT);
     } catch (error) {
-      console.error(error);
+      console.error("handlePlay error:", error);
       alert("Transaction failed. Please try again.");
     }
   };
@@ -156,30 +175,11 @@ export default function Home() {
   // Fungsi untuk menangani klaim hadiah oleh pemenang
   const handleClaim = async () => {
     try {
-      let provider;
-      if (typeof window.ethereum !== "undefined") {
-        await window.ethereum.request({ method: "eth_requestAccounts" });
-        provider = new ethers.BrowserProvider(window.ethereum);
-      } else {
-        const coinbaseWallet = new CoinbaseWalletSDK({
-          appName: APP_NAME,
-          appLogoUrl: APP_LOGO_URL,
-          darkMode: false
-        });
-        const ethereum = coinbaseWallet.makeWeb3Provider(
-          DEFAULT_ETH_JSONRPC_URL,
-          CHAIN_ID
-        );
-        await ethereum.request({ method: "eth_requestAccounts" });
-        provider = new ethers.BrowserProvider(ethereum);
-      }
+      const provider = await getProvider();
       const signer = await provider.getSigner();
 
-      // Konfigurasi LotteryClaim contract (alamat diambil dari environment variable publik)
       const LOTTERY_CLAIM_ADDRESS = process.env.NEXT_PUBLIC_LOTTERY_CLAIM_ADDRESS;
-      const lotteryClaimABI = [
-        "function claimPrize() external"
-      ];
+      const lotteryClaimABI = ["function claimPrize() external"];
       const lotteryClaimContract = new ethers.Contract(
         LOTTERY_CLAIM_ADDRESS,
         lotteryClaimABI,
