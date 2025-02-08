@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Hitung hadiah: 95% dari total taruhan (token)
+    // Hitung hadiah: 95% dari total taruhan
     const prizeTokens = totalBet * 0.95;
 
     // Pilih pemenang secara acak
@@ -35,12 +35,12 @@ export default async function handler(req, res) {
     }
     const wallet = new ethers.Wallet(mainPrivateKey, provider);
 
-    // Konfigurasi token contract
+    // Konfigurasi token contract (pastikan token mendukung approve)
     const TOKEN_CONTRACT_ADDRESS =
       process.env.TOKEN_CONTRACT_ADDRESS ||
       "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
     const tokenABI = [
-      "function transfer(address to, uint256 amount) public returns (bool)"
+      "function approve(address spender, uint256 amount) public returns (bool)"
     ];
     const tokenContract = new ethers.Contract(
       TOKEN_CONTRACT_ADDRESS,
@@ -51,9 +51,27 @@ export default async function handler(req, res) {
     // Konversi jumlah hadiah ke satuan token terkecil (asumsi 18 desimal)
     const prizeAmount = ethers.parseUnits(prizeTokens.toString(), 18);
 
-    // Kirim transaksi transfer dari main wallet ke pemenang
-    const tx = await tokenContract.transfer(winner, prizeAmount);
-    await tx.wait();
+    // Konfigurasi smart contract LotteryClaim
+    const LOTTERY_CLAIM_ADDRESS = process.env.LOTTERY_CLAIM_ADDRESS;
+    if (!LOTTERY_CLAIM_ADDRESS) {
+      throw new Error("LOTTERY_CLAIM_ADDRESS not configured");
+    }
+    const lotteryClaimABI = [
+      "function setWinner(address _winner, uint256 _prize) external"
+    ];
+    const lotteryClaimContract = new ethers.Contract(
+      LOTTERY_CLAIM_ADDRESS,
+      lotteryClaimABI,
+      wallet
+    );
+
+    // Approve LotteryClaim untuk menarik token hadiah dari main wallet
+    const approveTx = await tokenContract.approve(LOTTERY_CLAIM_ADDRESS, prizeAmount);
+    await approveTx.wait();
+
+    // Set pemenang dan hadiah pada LotteryClaim contract
+    const setWinnerTx = await lotteryClaimContract.setWinner(winner, prizeAmount);
+    await setWinnerTx.wait();
 
     res.status(200).json({ winner, prize: prizeTokens });
   } catch (error) {
