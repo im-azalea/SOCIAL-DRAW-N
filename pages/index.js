@@ -17,12 +17,13 @@ export default function Home() {
 
   const TOKEN_AMOUNT = 10; // Untuk testing, tiket seharga 10 token
 
-  // Untuk Coinbase Wallet fallback
-  // Anda bisa mengatur nilai default RPC dan chain ID (misalnya, Base Mainnet chain id 8453)
+  // Konfigurasi untuk Coinbase Wallet fallback
   const APP_NAME = "Social Draw";
   const APP_LOGO_URL = "https://social-draw-1.vercel.app/favicon.ico";
+  // Pastikan ganti nilai DEFAULT_ETH_JSONRPC_URL dengan RPC endpoint jaringan Base yang benar
   const DEFAULT_ETH_JSONRPC_URL =
     process.env.NEXT_PUBLIC_RPC_URL || "https://YOUR_BASE_RPC_URL_HERE";
+  // Misalnya chain id untuk Base Mainnet adalah 8453; sesuaikan jika berbeda
   const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 8453;
 
   // Fungsi menghitung waktu mundur ke awal jam berikutnya
@@ -96,9 +97,8 @@ export default function Home() {
   const handlePlay = async () => {
     try {
       let provider;
-      // Cek apakah window.ethereum tersedia (desktop atau beberapa mobile wallet)
+      // Cek apakah window.ethereum tersedia
       if (typeof window.ethereum !== "undefined") {
-        // Gunakan provider dari window.ethereum
         await window.ethereum.request({ method: "eth_requestAccounts" });
         provider = new ethers.BrowserProvider(window.ethereum);
       } else {
@@ -113,10 +113,9 @@ export default function Home() {
           DEFAULT_ETH_JSONRPC_URL,
           CHAIN_ID
         );
+        // Tambahkan request accounts secara eksplisit untuk memastikan pop-up koneksi muncul
+        await ethereum.request({ method: "eth_requestAccounts" });
         provider = new ethers.BrowserProvider(ethereum);
-        // Minta koneksi (Coinbase Wallet akan menampilkan tampilan koneksi)
-        // Catatan: Coinbase Wallet SDK biasanya memunculkan pop-up untuk koneksi
-        // Jangan lupa untuk mengecek apakah koneksi berhasil
       }
 
       // Dapatkan signer dan alamat wallet pemain
@@ -171,6 +170,7 @@ export default function Home() {
           DEFAULT_ETH_JSONRPC_URL,
           CHAIN_ID
         );
+        await ethereum.request({ method: "eth_requestAccounts" });
         provider = new ethers.BrowserProvider(ethereum);
       }
       const signer = await provider.getSigner();
@@ -225,7 +225,6 @@ export default function Home() {
         <p>Next Draw In:</p>
         <p>{countdown}</p>
       </div>
-      {/* Tampilkan tombol Claim jika wallet yang terhubung adalah pemenang dan belum klaim */}
       {prevWinner &&
         currentAddress.toLowerCase() === prevWinner.toLowerCase() &&
         !hasClaimed && (
