@@ -11,7 +11,7 @@ export default function Home() {
   const [prevPrize, setPrevPrize] = useState(0);
   const [countdown, setCountdown] = useState("");
 
-  const TOKEN_AMOUNT = 500; // Setiap tiket berharga 500 token
+  const TOKEN_AMOUNT = 10; // Mengubah tiket menjadi 10 token untuk testing
 
   // Fungsi untuk menghitung sisa waktu sampai awal jam berikutnya
   const calculateCountdown = () => {
@@ -93,7 +93,7 @@ export default function Home() {
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
-      // Konfigurasi token contract
+      // Konfigurasi token contract (pastikan alamat kontrak sudah benar untuk jaringan Base)
       const TOKEN_CONTRACT_ADDRESS =
         "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
       const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
@@ -107,7 +107,7 @@ export default function Home() {
         signer
       );
 
-      // Hitung jumlah token (500 token, asumsikan 18 desimal)
+      // Hitung jumlah token (10 token, asumsikan 18 desimal)
       const amount = ethers.parseUnits(TOKEN_AMOUNT.toString(), 18);
 
       // Transfer token dari wallet pemain ke main wallet
