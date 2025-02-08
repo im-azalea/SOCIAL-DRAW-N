@@ -1,33 +1,24 @@
-
 // pages/index.js
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
-  // State untuk menyimpan peserta, total bet, ronde, dan info pemenang sebelumnya
   const [participants, setParticipants] = useState([]);
-  const [totalBet, setTotalBet] = useState(0); // total token terkumpul (setiap peserta bayar 500 token)
+  const [totalBet, setTotalBet] = useState(0);
   const [round, setRound] = useState(1);
   const [prevWinner, setPrevWinner] = useState(null);
   const [prevPrize, setPrevPrize] = useState(0);
   const [countdown, setCountdown] = useState("");
 
-  // Konstanta
-  const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
-  const TOKEN_CONTRACT_ADDRESS = "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
-  // Minimal ABI untuk ERC20 transfer
-  const tokenABI = [
-    "function transfer(address to, uint256 amount) public returns (bool)"
-  ];
+  const TOKEN_AMOUNT = 500; // Setiap tiket berharga 500 token
 
-  // Fungsi untuk menghitung sisa waktu hingga jam berikutnya (draw otomatis tiap 1 jam)
+  // Fungsi untuk menghitung sisa waktu sampai awal jam berikutnya
   const calculateCountdown = () => {
     const now = new Date();
     const nextHour = new Date(now);
     nextHour.setMinutes(60, 0, 0); // set ke awal jam berikutnya
-    const diff = nextHour - now;
-    return diff;
+    return nextHour - now;
   };
 
   // Update countdown setiap detik
@@ -35,8 +26,8 @@ export default function Home() {
     const interval = setInterval(() => {
       const diff = calculateCountdown();
       if (diff <= 0) {
-        // Waktu habis, jalankan draw
-        runDraw();
+        // Ketika waktu habis, jalankan draw otomatis
+        handleDraw();
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -51,28 +42,45 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [participants]);
 
-  // Fungsi untuk menjalankan proses draw otomatis
-  const runDraw = () => {
-    if (participants.length > 0) {
-      // Pilih pemenang secara acak
-      const winnerIndex = Math.floor(Math.random() * participants.length);
-      const winnerAddress = participants[winnerIndex];
-      // Hitung hadiah: 95% dari total bet (setiap peserta membayar 500 token)
-      const totalTokens = participants.length * 500;
-      const prize = totalTokens * 0.95;
-      setPrevWinner(winnerAddress);
-      setPrevPrize(prize);
-      alert(`Draw complete! Winner is ${winnerAddress}\nPrize: ${prize} tokens`);
-    } else {
-      alert("No participants this round.");
+  // Fungsi untuk memanggil API endpoint runDraw
+  const handleDraw = async () => {
+    if (participants.length === 0) {
+      alert("No participants in this round.");
+      setRound((prev) => prev + 1);
+      return;
     }
-    // Reset state untuk ronde baru
+    try {
+      const response = await fetch("/api/runDraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          participants: participants,
+          totalBet: totalBet
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setPrevWinner(data.winner);
+        setPrevPrize(data.prize);
+        alert(
+          `Draw complete!\nWinner: ${data.winner}\nPrize: ${data.prize} tokens`
+        );
+      } else {
+        alert("Draw failed: " + data.error);
+      }
+    } catch (error) {
+      console.error("Error in draw:", error);
+      alert("An error occurred during the draw.");
+    }
+    // Reset data untuk ronde berikutnya
     setParticipants([]);
     setTotalBet(0);
     setRound((prev) => prev + 1);
   };
 
-  // Fungsi untuk menangani klik tombol "Play"
+  // Fungsi untuk menangani klik tombol "PLAY"
   const handlePlay = async () => {
     try {
       if (!window.ethereum) {
@@ -85,25 +93,32 @@ export default function Home() {
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
-      // Instansiasi contract token menggunakan ethers.js
+      // Konfigurasi token contract
+      const TOKEN_CONTRACT_ADDRESS =
+        "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
+      const MAIN_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
+      const tokenABI = [
+        "function transfer(address to, uint256 amount) public returns (bool)"
+      ];
+
       const tokenContract = new ethers.Contract(
         TOKEN_CONTRACT_ADDRESS,
         tokenABI,
         signer
       );
 
-      // Hitung jumlah token: 500 token dengan asumsi 18 desimal
-      const amount = ethers.parseUnits("500", 18);
+      // Hitung jumlah token (500 token, asumsikan 18 desimal)
+      const amount = ethers.parseUnits(TOKEN_AMOUNT.toString(), 18);
 
-      // Kirim transaksi transfer token ke wallet utama
+      // Transfer token dari wallet pemain ke main wallet
       const tx = await tokenContract.transfer(MAIN_WALLET, amount);
       alert("Transaction submitted. Waiting for confirmation...");
       await tx.wait();
       alert("Transaction confirmed! You have joined the draw.");
 
-      // Update state: tambahkan peserta dan total bet
+      // Update data peserta dan total taruhan
       setParticipants((prev) => [...prev, userAddress]);
-      setTotalBet((prev) => prev + 500);
+      setTotalBet((prev) => prev + TOKEN_AMOUNT);
     } catch (error) {
       console.error(error);
       alert("Transaction failed. Please try again.");
